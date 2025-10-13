@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>SSE Chat Stream</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.8; }
+        #typing-indicator { font-weight: bold; display: none; margin-top: 10px; }
+        #titleBox { margin-top: 6px; color: #555; }
+    </style>
+</head>
+<body>
+<h2>악성 민원 대응 챗봇</h2>
+
+<div id="titleBox">제목: <span id="sessionTitle">새 대화</span></div> <!-- ★ 제목 표시 -->
+
+<input type="text" id="questionInput" placeholder="질문을 입력하세요" style="width: 400px; padding: 5px;">
+<button id="start">질문하기</button>
+
+<div id="response" style="margin-top:20px; white-space:pre-wrap; font-family:Arial; line-height:1.8;"></div>
+<div id="typing-indicator">GPT is typing<span id="dots"></span></div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        let currentSessionId = null;
+
+        document.getElementById("start").addEventListener("click", async () => {
+            const question = document.getElementById("questionInput").value.trim();
+            const responseDiv = document.getElementById("response");
+            const typingIndicator = document.getElementById("typing-indicator");
+            const dotsSpan = document.getElementById("dots");
+            const sessionTitleEl = document.getElementById("sessionTitle");
+
+            responseDiv.innerHTML = "";
+            typingIndicator.style.display = "none";
+            dotsSpan.textContent = "";
+
+            if (!question) {
+                alert("질문을 입력해주세요!");
+                return;
+            }
+
+            const token = localStorage.getItem("accessToken");
+            if (!token) {
+                alert("JWT 토큰이 없습니다. 먼저 localStorage에 accessToken을 저장하세요.");
+                return;
+            }
+
+            // 세션 없으면 생성
+            if (!currentSessionId) {
+                const sessionRes = await fetch("/api/chat-sessions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + token
+                    }
+                });
+
+                if (!sessionRes.ok) {
+                    alert("세션 생성 실패: " + sessionRes.status);
+                    return;
+                }
+
+                const sessionData = await sessionRes.json();
+                currentSessionId = sessionData.result.sessionId;
+                // 초기 제목 표시 (빈 값일 수 있음)
+                if (sessionData.result.title) {
+                    sessionTitleEl.textContent = sessionData.result.title;
+                }
+                console.log("세션 생성 완료:", currentSessionId);
+            }
+
+            const encodedQuestion = encodeURIComponent(question);
+            const esUrl = `/api/chat/stream?sessionId=${currentSessionId}&question=${encodedQuestion}&token=${token}`;
+            const eventSource = new EventSource(esUrl);
+
+            // 타이핑 인디케이터
+            typingIndicator.style.display = "block";
+            let dotCount = 0;
+            const dotInterval = setInterval(() => {
+                dotCount = (dotCount + 1) % 4;
+                dotsSpan.textContent = ".".repeat(dotCount);
+            }, 500);
+
+            // 스트림 본문 처리
+            let buffer = "";
+
+            // 기본 message 이벤트(답변 청크)
+            eventSource.onmessage = (event) => {
+                const chunk = event.data;
+
+                // 스트림 종료 신호
+                if (chunk === "[END]") {
+                    try {
+                        buffer = buffer.trim();
+                        const jsonStart = buffer.indexOf("{");
+                        const jsonEnd = buffer.lastIndexOf("}") + 1;
+                        const jsonString = buffer.substring(jsonStart, jsonEnd).trim();
+
+                        console.log("📦 최종 파싱 대상 JSON:", jsonString);
+
+                        // 닫힘 중복/노이즈 방지
+                        const cleanedJson = jsonString.replace(/}\s*$/, "}");
+
+                        const parsed = JSON.parse(cleanedJson);
+
+                        // 안전 렌더링 (간단히 innerHTML 사용하지만 신뢰된 서버만 연결된 테스트 페이지 기준)
+                        responseDiv.innerHTML = `
+                <p style="margin-bottom: 8px;"><strong>💬 답변:</strong><br>${parsed.answer}</p>
+                <p style="margin-bottom: 4px;"><strong>📚 출처:</strong></p>
+                <ul style="margin: 0; padding: 0; list-style-type: none;">
+                  ${parsed.sourcePages.map(sp => `
+                    <li style="margin-bottom: 4px;">
+                      <div style="display: flex; flex-direction: column; gap: 2px; align-items: flex-start;">
+                        <span>📌 <strong>유형:</strong> ${sp["유형"]}</span>
+                        <span>⚖ <strong>관련 법률:</strong> ${sp["관련 법률"] || sp["관련법률"] || "없음"}</span>
+                      </div>
+                    </li>
+                  `).join("")}
+                </ul>
+              `;
+                    } catch (e) {
+                        console.error("JSON 파싱 오류:", e);
+                        responseDiv.textContent = "⚠️ 응답 파싱 중 오류 발생";
+                    } finally {
+                        typingIndicator.style.display = "none";
+                        clearInterval(dotInterval);
+                        eventSource.close();
+                    }
+                    return;
+                }
+
+                // [JSON] 블록만 누적
+                if (chunk.startsWith("[JSON]")) {
+                    buffer = chunk.replace("[JSON]", "").trim();
+                    console.log("🔎 [JSON] 수신 데이터:", buffer);
+                } else {
+                    // 실시간 토큰(요약/프리뷰 등 필요하면 여기서 화면에 보여줘도 됨)
+                    console.log("실시간 토큰:", chunk);
+                }
+            };
+
+            // ★ 타이틀 이벤트 수신 → 즉시 UI에 반영
+            eventSource.addEventListener("title", (e) => {
+                try {
+                    const payload = JSON.parse(e.data); // { sessionId, title }
+                    if (String(payload.sessionId) === String(currentSessionId) && payload.title) {
+                        sessionTitleEl.textContent = payload.title;
+                        console.log("📝 제목 갱신:", payload.title);
+                    }
+                } catch (err) {
+                    console.warn("title 이벤트 파싱 실패:", err);
+                }
+            });
+
+            // 에러/종료 처리
+            eventSource.onerror = () => {
+                console.log("⛔ SSE 연결 종료/에러");
+                typingIndicator.style.display = "none";
+                clearInterval(dotInterval);
+                eventSource.close();
+            };
+        });
+    });
+</script>
+</body>
+</html>

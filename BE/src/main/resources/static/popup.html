@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>Twilio 수신 테스트</title>
+    <script src="https://cdn.jsdelivr.net/npm/@twilio/voice-sdk@2.11.2/dist/twilio.min.js"></script>
+    <style>
+        .log-line {
+            font-family: 'Arial', sans-serif;
+            font-size: 14px;
+            margin-bottom: 8px;
+            padding: 4px;
+            border-bottom: 1px solid #eee;
+        }
+        #log-area {
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+        }
+        #session-info {
+            margin: 10px 0;
+            font-weight: bold;
+            color: #333;
+        }
+        .final-summary {
+            margin-top: 10px;
+            padding: 10px;
+            border-top: 2px solid #aaa;
+            background: #f5f5f5;
+            white-space: pre-line;
+        }
+        .summary-buttons {
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .summary-buttons button {
+            padding: 10px 20px;
+            font-weight: bold;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        .summary-buttons button:hover {
+            background-color: #0056b3;
+        }
+        #summary-content {
+            border: 1px solid #ccc;
+            padding: 15px;
+            background-color: #fff;
+            min-height: 100px;
+            white-space: pre-line;
+        }
+    </style>
+</head>
+<body>
+<h2>📞 브라우저 전화 수신 대기 중...</h2>
+<button id="update-session-btn" style="display:none;">세션 userId 변경</button>
+<button id="accept-btn" style="display:none;">📞 전화 수락</button>
+
+<div id="session-info">🔒 세션 정보 수신 대기 중...</div>
+
+<h3>📝 실시간 STT 로그</h3>
+<div id="log-area"></div>
+
+
+<h3>📜 최종 전체 텍스트</h3>
+<div id="final-inbound"></div>
+<div id="final-outbound"></div>
+
+<h3>📝 상담 요약</h3>
+<div id="summary-section">
+    <div class="summary-buttons">
+        <button id="v1-summary-btn">v1 요약 생성</button>
+        <button id="v2-summary-btn">v2 요약 생성</button>
+    </div>
+    <div id="summary-content">요약 내용이 여기에 표시됩니다.</div>
+</div>
+
+<script>
+    let pendingConnection = null;
+    let ws = null;
+    let currentUserId = null;
+    let callSessionId = null;
+
+    const sessionInfoDiv = document.getElementById("session-info");
+    const logArea = document.getElementById("log-area");
+    const finalInboundDiv = document.getElementById("final-inbound");
+    const finalOutboundDiv = document.getElementById("final-outbound");
+    const summarySection = document.getElementById("summary-section");
+    const summaryContentDiv = document.getElementById("summary-content");
+    const v1SummaryBtn = document.getElementById("v1-summary-btn");
+    const v2SummaryBtn = document.getElementById("v2-summary-btn");
+
+    const lines = {}; // track + index 키 기반 저장
+    const trackState = {
+        INBOUND: { currentIndex: 0, finalReceived: false },
+        OUTBOUND: { currentIndex: 0, finalReceived: false }
+    };
+
+    function parseQueryParams(queryString) {
+        const params = {};
+        if (!queryString) {
+            return params;
+        }
+        queryString.split('&').forEach(pair => {
+            const [key, value] = pair.split('=');
+            if (key && value) {
+                params[decodeURIComponent(key)] = decodeURIComponent(value);
+            }
+        });
+        return params;
+    }
+
+    function setupWebSocketListeners(websocket) {
+        websocket.onopen = () => {
+            console.log("🌐 WebSocket 연결 성공, 통화 수락 진행");
+            if (pendingConnection) {
+                pendingConnection.accept();
+                console.log("✅ 통화 수락 완료");
+                const parsed = parseQueryParams(pendingConnection.parameters.Params);
+                const firstCallSid = parsed.initialCallSid;
+                // 통화 수락 후 서버로 메시지 전송
+                ws.send(JSON.stringify({
+                    event: "callAccepted",
+                    callSid: firstCallSid
+                }));
+                console.log("✅생성된 웹소켓으로 통화 수락 시 callSid 전송 : ", firstCallSid);
+                pendingConnection = null;
+                document.getElementById("accept-btn").style.display = "none";
+            }
+        };
+        websocket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                console.log("=== data 출력 ===");
+                console.log("Received WebSocket data:", data);
+
+                if (data.type === "sessionInfo") {
+                    sessionInfoDiv.innerText = `🔑 세션 코드: ${data.sessionCode} | 생성 시각: ${data.createdAt} | 폭언 횟수: ${data.totalAbuseCnt}`;
+                } else if (data.type === "totalAbuseCntUpdate") {
+                    sessionInfoDiv.innerText = sessionInfoDiv.innerText.replace(/폭언 횟수: .+/, `폭언 횟수: ${data.totalAbuseCnt}`);
+                    console.log(`💡 폭언 횟수 업데이트됨: ${data.totalAbuseCnt} (세션 ID: ${data.callSessionId})`);
+                } else if (data.type === "finalTranscript") {
+                    const isInbound = data.track === "INBOUND";
+                    const targetDiv = isInbound ? finalInboundDiv : finalOutboundDiv;
+                    const label = isInbound ? "👤 고객 전체 텍스트" : "💼 상담원 전체 텍스트";
+
+                    const summaryHTML = `
+                    <div class="final-summary">
+                        <strong>${label}</strong><br>
+                        ${data.text}
+                    </div>
+                `;
+                    targetDiv.innerHTML = summaryHTML;
+                } else if (data.type === "stt") {
+                    const sttLogData = data.payload;
+
+                    const track = sttLogData.track;
+                    const script = sttLogData.script || data.text;
+                    const isFinal = sttLogData.isFinal;
+                    const abuseLabel = isFinal ? (sttLogData.isAbuse ? `🚫 ${sttLogData.abuseType}` : "✅ 정상") : "🟡 중간";
+
+                    const label = track === "INBOUND" ? "👤 고객" : "💼 상담원";
+                    const finalLabel = isFinal ? "🟢 최종" : "🟡 중간";
+
+                    const html = `<div class="log-line">${label} | ${finalLabel} | ${abuseLabel}<br>🗣️ ${script}</div>`;
+
+                    const state = trackState[track];
+                    const key = `${track}-${state.currentIndex}`;
+
+                    lines[key] = html;
+
+                    if (isFinal) {
+                        state.finalReceived = true;
+                        state.currentIndex++;
+                    }
+
+                    logArea.innerHTML = Object.values(lines).join("");
+                    logArea.scrollTop = logArea.scrollHeight;
+                } else {
+
+                    console.warn("Unknown WebSocket message type received:", data.type, data);
+                }
+
+            } catch (e) {
+                console.error("⚠️ WebSocket 메시지 처리 오류:", e);
+            }
+        };
+        websocket.onerror = err => console.error("❌ WebSocket 오류:", err);
+        websocket.onclose = () => console.log("🔌 WebSocket 연결 종료");
+    }
+
+    function showSummary(version) {
+        tabV1.classList.remove('active');
+        tabV2.classList.remove('active');
+
+        if (!callSessionId) {
+            summaryContentDiv.innerText = "세션 정보가 없어 요약을 가져올 수 없습니다.";
+            return;
+        }
+
+        if (version === 'v1') {
+            tabV1.classList.add('active');
+            fetchSummary('simple');
+        } else if (version === 'v2') {
+            tabV2.classList.add('active');
+            fetchSummary('detailed');
+        }
+    }
+
+    function fetchSummary(summaryType) {
+        // API 명세에 맞는 Path Variable과 URL 구성
+        const apiPath = `/api/call-sessions/${callSessionId}/summary/${summaryType}`;
+        const jwtToken = localStorage.getItem('jwtToken');
+
+        summaryContentDiv.innerText = "📝 요약 내용을 가져오는 중...";
+
+        fetch(apiPath, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${jwtToken}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        })
+            .then(response => {
+                if (!response.ok) {
+                    // API 호출 실패 시 에러 처리
+                    throw new Error(`API 호출 실패: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.isSuccess) {
+                    const summaryText = data.result.summaryText;
+                    if (summaryText) {
+                        summaryContentDiv.innerText = summaryText;
+                    } else {
+                        summaryContentDiv.innerText = "요약 내용이 없습니다.";
+                    }
+                } else {
+                    summaryContentDiv.innerText = `🚨 API 오류: ${data.message}`;
+                    console.error("🚨 API 호출 실패:", data.message);
+                }
+            })
+            .catch(error => {
+                summaryContentDiv.innerText = `🚨 API 호출 중 네트워크 오류: ${error.message}`;
+                console.error("🚨 API 호출 중 오류:", error);
+            })
+    }
+
+    const jwtToken = localStorage.getItem('jwtToken'); // 브라우저 로컬 스토리지에 jwtToken : <token> 이 저장되어 있어야 함
+    if (!jwtToken) {
+        console.error("🚨 JWT 토큰이 localStorage에 없습니다. 로그인 후 다시 시도해주세요.");
+        sessionInfoDiv.innerText = "🚨 로그인 필요: JWT 토큰 없음";
+        // 토큰이 없으면 Twilio Device 초기화 시도를 하지 않습니다.
+    } else {
+        fetch('/api/token', {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${jwtToken}`,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        })
+            .then(res => {
+                if (!res.ok) {
+                    console.error(`🚨 Twilio 토큰 요청 실패: ${res.status} ${res.statusText}`);
+                    sessionInfoDiv.innerText = `🚨 인증 실패: ${res.status} ${res.statusText}`;
+                    throw new Error('Failed to get Twilio token');
+                }
+                return res.json();
+            })
+            .then(data => {
+                const accessToken = data.result.twilioAccessToken;
+                currentUserId = data.result.userId;
+
+                if (!currentUserId) {
+                    console.error("🚨 서버로부터 userId를 받지 못했습니다. WebSocket 연결 불가.");
+                    sessionInfoDiv.innerText = "🚨 서버 오류: 사용자 ID 없음";
+                    return;
+                }
+
+                const DeviceCtor = window.Device || (window.Twilio && Twilio.Device);
+                if (!DeviceCtor) {
+                    console.error("🚨 Twilio SDK가 로드되지 않았습니다. 스크립트 경로/네트워크를 확인하세요.");
+                    sessionInfoDiv.innerText = "🚨 Twilio SDK 로드 실패";
+                    return;
+                }
+                const device = new DeviceCtor(accessToken, { logLevel: 1 });
+
+                device.on('registered', () => {
+                    console.log('✅ Device ready');
+                    // Twilio.Device.audio.speakerDevices.set('default');
+                    console.log('Twilio.Device.audio on registered:', (Twilio && Twilio.Device && Twilio.Device.audio) || device.audio);
+                });
+
+                device.on('incoming', conn => {
+                    console.log('📞 수신:', conn.parameters.From);
+                    pendingConnection = conn;
+                    document.getElementById("accept-btn").style.display = "inline";
+                    document.getElementById("update-session-btn").style.display = "inline";
+                    // incoming 통화가 수락되기 전에 취소되었을 때 처리 필요
+                });
+
+                device.register().catch(err => console.error('🚨 register() 실패:', err));
+
+                // Twilio Device 초기화 이후 세션 useId 변경을 위한 이벤트 리스너
+                document.getElementById("update-session-btn").addEventListener("click", () => {
+                    if (!pendingConnection) {
+                        alert("수신 전화가 없습니다.");
+                        return;
+                    }
+
+                    const parsedParams = parseQueryParams(pendingConnection.parameters.Params);
+                    const initialCallSid = parsedParams.initialCallSid;
+                    const callerNumber = pendingConnection.parameters.From;
+
+                    fetch('/api/call-sessions/user', {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${jwtToken}`
+                        },
+                        body: JSON.stringify({
+                            originalInboundCallSid: initialCallSid,
+                            callerNumber: callerNumber
+                        })
+                    })
+                        .then(res => res.json())
+                        .then(apiResponse => {
+                            console.log("✅ 세션 생성 응답:", apiResponse);
+                            if (apiResponse.isSuccess && apiResponse.result) {
+                                const sessionInfo = apiResponse.result;
+
+                                callSessionId = sessionInfo.callSessionId;
+                                console.log("callsessionId : ", callSessionId);
+
+                                // ✅ 세션 정보 UI 업데이트
+                                sessionInfoDiv.innerText = `🔑 세션 코드: ${sessionInfo.callSessionCode} | 생성 시각: ${sessionInfo.createdAt} | 폭언 횟수: ${sessionInfo.totalAbuseCnt}`;
+                            } else {
+                                console.error("🚨 세션 생성 실패:", apiResponse.message || apiResponse);
+                                alert("세션 생성에 실패했습니다.");
+                            }
+                        })
+                        .catch(err => console.error("🚨 세션 생성 오류:", err));
+                });
+
+                document.getElementById("accept-btn").addEventListener("click", () => {
+                    if (!pendingConnection) {
+                        alert("통화 수락 대기 중인 연결이 없습니다.");
+                        return;
+                    }
+
+                    const parsedForSend = parseQueryParams(pendingConnection.parameters.Params);
+                    const callSid = parsedForSend.initialCallSid;
+
+                    // 통화 수락 클릭 시에만 웹소켓 연결을 시작하고, 이미 연결되어 있으면 새로 연결하지 않음
+                    if (!ws || ws.readyState === WebSocket.CLOSED) {
+                        ws = new WebSocket(`wss://callprotect.site/ws/stt?userId=${currentUserId}`);
+
+                        // 웹소켓 연결 리스너 설정
+                        setupWebSocketListeners(ws);
+                    } else {
+                        // 이미 웹소켓 연결된 상태면 바로 통화 수락
+                        if (pendingConnection) {
+                            pendingConnection.accept();
+                            console.log("✅ 통화 수락 완료 (웹소켓 이미 연결됨)");
+
+                            // 통화 수락 후 서버로 메시지 전송
+                            ws.send(JSON.stringify({
+                                event: "callAccepted",
+                                callSid: callSid
+                            }));
+                            console.log("✅기존 웹소켓으로 통화 수락 시 callSid 전송 : ", callSid);
+                            pendingConnection = null;
+                            document.getElementById("accept-btn").style.display = "none";
+                        }
+                    }
+                });
+
+                device.on('connect', () => console.log('🔊 통화 연결됨'));
+                device.on('disconnect', () => {
+                    console.log('❌ 통화 종료');
+                    document.getElementById("accept-btn").style.display = "none";
+                });
+
+                device.on('error', err => {
+                    console.error('🚨 Twilio 오류:', err);
+                    document.getElementById("accept-btn").style.display = "none";
+                });
+            });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+        v1SummaryBtn.addEventListener('click', () => {
+            if (!callSessionId) {
+                summaryContentDiv.innerText = "🚨 세션 정보가 없어 요약을 가져올 수 없습니다. [v1]";
+                return;
+            }
+            fetchSummary('simple');
+        });
+
+        v2SummaryBtn.addEventListener('click', () => {
+            if (!callSessionId) {
+                summaryContentDiv.innerText = "🚨 세션 정보가 없어 요약을 가져올 수 없습니다.[v2]";
+                return;
+            }
+            fetchSummary('detailed');
+        });
+    });
+
+</script>
+</body>
+</html>
