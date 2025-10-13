@@ -1,0 +1,473 @@
+/* 전체 배경 */
+.total {
+  display: flex;
+  padding: 20px;
+  background-color: #f3f6fe;
+  height: 100vh;
+  min-height: 0;
+  flex-direction: column;
+  font-family: "Segoe UI", sans-serif;
+}
+
+/* 상단 정보 박스 */
+.box1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: white;
+  padding: 24px;
+  border-radius: 20px;
+  margin-bottom: 20px;
+}
+
+/* 왼쪽 정보 */
+.call-title {
+  display: flex;
+  font-size: 33px;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 15px;
+}
+
+.call-date,
+.timer {
+  color: #757575;
+  font-size: 20px;
+  margin-right: 16px;
+}
+
+.call-details {
+  display: flex;
+  gap: 8px;
+}
+
+/* 오른쪽 경고 정보 */
+.right-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: right;
+}
+
+.warning-count {
+  font-size: 20px;
+  font-weight: normal;
+  margin-bottom: 10px;
+}
+
+/* 경고 게이지 바 */
+.warning-bar {
+  width: 350px;
+  height: 30px;
+  background-color: #f1eefc;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.warning-bar.multi-color {
+  display: flex;
+  width: 280px;
+  height: 35px;
+  border-radius: 50px;
+  overflow: hidden;
+  background-color: #f1eefc;
+  border: 2px solid white;
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 0.3s ease-in-out;
+  border-radius: 20px;
+}
+
+.bar-segment {
+  flex: 1;
+  transition: background-color 0.3s ease-in-out;
+}
+
+.fill-yellow {
+  background-color: #ffd400;
+}
+
+.fill-orange {
+  background-color: #ff7f00;
+}
+
+.fill-red {
+  background-color: #ff0000;
+}
+
+/* 중간 컨텐츠 영역 */
+.box-wrapper {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 음성 기록(STT) */
+.box2 {
+  flex: 5;
+  display: flex;
+  flex-direction: column;
+  background-color: white;
+  padding: 24px;
+  border-radius: 20px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.header-right-actions {
+  display: flex;
+  flex-direction: column; /* 자식 요소들을 세로로 쌓기 */
+  align-items: flex-end; /* 모든 자식 요소를 오른쪽 끝에 정렬 */
+  gap: 8px; /* 자식 요소들 사이의 간격 */
+}
+.header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.ai-note {
+  font-size: 18px;
+  color: #757575;
+}
+
+.conversation {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 10px;
+  padding: 20px;
+  min-height: 0;
+  max-height: 70vh;
+}
+
+.conversation strong {
+  font-size: 18px;
+}
+
+.conversation p {
+  margin-bottom: 12px;
+  line-height: 1.6;
+  text-align: left;
+  font-size: 18px;
+}
+
+/* 부적절 발언 강조 */
+.warning-highlight {
+  color: #ff0000;
+}
+
+/* AI 요약 */
+.box3 {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  background-color: white;
+  border-radius: 20px;
+  min-height: calc(100vh - 300px);
+}
+
+.box3-body {
+  flex: 1; /* 🔥 요게 핵심 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.summary-content {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ai-summary-hint {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-size: 20px;
+  max-width: 360px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+/* 로딩 상태 */
+.ai-summary-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #555;
+  height: 100%;
+}
+
+.spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid #ccc;
+  border-top: 4px solid #888;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 10px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 요약 완료 상태 */
+.ai-summary-result {
+  padding: 20px;
+  font-size: 20px;
+  width: 100%;
+}
+
+.summary-section {
+  margin-bottom: 20px;
+}
+
+.summary-section ul {
+  margin: 6px 0 0 20px;
+  padding: 0;
+  list-style-type: disc;
+}
+
+/* 대화 줄별 블록 */
+.conversation .line {
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+.conversation .line p {
+  margin: 4px 0 0 0;
+  line-height: 1.6;
+}
+
+.right-part {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 2;
+  min-height: calc(100vh - 300px);
+}
+
+/* 상담 종료 버튼 영역 */
+
+.end-button {
+  margin-top: 10px;
+  height: 80px;
+  width: 100%;
+  padding: 12px 24px;
+  background-color: #5c24af;
+  color: white;
+  font-size: 18px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 24px;
+}
+
+.summary-button {
+  background-color: #f3f6fe;
+  font-size: 18px;
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.1);
+  position: relative;
+  margin-top: 15px;
+}
+
+.summary-guide {
+  font-size: 18px;
+  margin-top: 12px;
+}
+
+.summary-version {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.version-label {
+  font-size: 18px;
+  color: black;
+  margin-top: 10px;
+  margin-right: 10px;
+}
+
+.version-select {
+  font-size: 18px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  margin-top: 10px;
+}
+
+.conversation .interim-line {
+  /* 중간 결과 줄 전체에 대한 스타일 (예: 줄 간격, 배경색 등) */
+  opacity: 0.7; /* 약간 흐리게 */
+  color: #666;
+  font-size: 0.9em;
+}
+
+.conversation .interim-text {
+  /* 중간 결과 텍스트 스타일 */
+  margin: 0;
+  padding: 0;
+}
+
+.version-description {
+  font-size: 16px;
+  color: black;
+  margin-top: 10px;
+}
+
+.version-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.version-button {
+  flex: 1;
+  padding: 6px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #f8f8f8;
+  color: #555;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* 버튼에 입체감 추가 */
+}
+
+.version-button:hover {
+  background-color: #ececec;
+  border-color: #ccc;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px); /* 호버 시 살짝 올라가는 효과 */
+}
+
+.version-button.active {
+  background-color: #5c24af; /* 선택된 버튼의 배경색 */
+  color: #fff; /* 선택된 버튼의 글자색 */
+  border-color: #5c24af; /* 선택된 버튼의 테두리색 */
+  box-shadow: 0 4px 8px rgba(106, 27, 154, 0.2);
+  transform: translateY(0);
+}
+
+.ai-summary-error {
+  margin-bottom: 10px;
+  text-align: "center";
+}
+
+.abuse-warning-toggle {
+  display: flex;
+  margin-top: 15px;
+}
+
+.toggle-button {
+  background-color: #f1f3f5; /* Light gray background */
+  color: #555; /* Darker text color */
+  border: none;
+  border-radius: 20px; /* Pill shape */
+  padding: 8px 16px;
+  font-size: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toggle-button:hover {
+  background-color: #e2e4e6;
+}
+
+.toggle-button.active {
+  background-color: #fff0f0;
+  color: #ff4d4f;
+  border: 1px solid #ffccc7;
+}
+
+.toggle-button.active:hover {
+  background-color: #ffe5e5;
+}
+
+.abuse-count {
+  font-weight: 600;
+  color: #888;
+}
+
+.toggle-button.active .abuse-count {
+  color: #ff4d4f;
+}
+
+.call-status {
+  margin-left: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  display: inline-flex;
+  gap: 1px;
+}
+
+@keyframes wave {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-5px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+}
+
+.call-status.in-progress {
+  color: #2e7d32;
+}
+
+.wavy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wavy span {
+  animation: wave 1.5s ease-in-out infinite;
+  animation-delay: calc(0.1s * var(--i));
+  margin: 0 1px;
+}
+
+.call-status.ended {
+  color: #888;
+}
