@@ -195,7 +195,7 @@
 ## 🖥 시스템 구성도
 
 ### 🔹 **아키텍처 구조**
-<img src="https://github.com/user-attachments/assets/37ff418f-dac8-4c29-9b31-22db069283fa" style="width:100%; height:auto;" />
+<img src="https://github.com/user-attachments/assets/f114a2c5-f2b3-439c-87ea-32802157fe92" style="width:100%; height:auto;" />
 
 ### 🔹 **ERD**
 <img src="https://github.com/user-attachments/assets/c2abbc6b-91ff-4df5-b6f5-2b66a3fecf7a" style="width:100%; height:auto;" />
